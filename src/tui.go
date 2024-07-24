@@ -5,21 +5,20 @@ import (
 	"path/filepath"
 );
 
-func GetPages(dir string) ([]os.DirEntry, error) {
+func GetPages(dir string) (map[string]string, error) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err;
 	}
 	
-	// Return all the files that end in .md
-	var pages []os.DirEntry
+	pages := make(map[string]string)
 	for _, file := range files {
-		if file.IsDir() {
-			continue;
+		// pages = append(pages, file.Name()[:len(file.Name())-3]);
+		content, err := os.ReadFile(filepath.Join(dir, file.Name()));
+		if err != nil {
+			return nil, err;
 		}
-		if filepath.Ext(file.Name()) == ".md" {
-			pages = append(pages, file);
-		}
+		pages[file.Name()[:len(file.Name())-3]] = string(content);
 	}
 
 	return pages, nil;
