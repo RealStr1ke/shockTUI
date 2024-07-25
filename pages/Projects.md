@@ -1,2 +1,1 @@
-Yo check these projects out
-Yo check these projects out
+Here are the projects I've worked on:

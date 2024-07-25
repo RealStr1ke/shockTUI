@@ -4,6 +4,11 @@ import (
 	"shockTUI/src"
 );
 
+func main() {
+	src.StartTUI();
+}
+
+/**
 func printPages(dir string) error {
 	pages, err := src.GetPages(dir);
 	if err != nil {
@@ -14,21 +19,22 @@ func printPages(dir string) error {
 		println(page);
 		println("=======");
 		println(content);
-		println("\n");1
+		println("\n");
 	}
 
 	return nil;
 }
-
 func main() {
-	// files, err := GetPages("pages");
-	// if err != nil {
-	// 	panic(err);
-	// }
-	// for _, file := range files {
-	// 	// Omit the file extensions and print the file names
-	// 	println(file.Name()[:len(file.Name())-3]);
-	// }
+	files, err := GetPages("pages");
+	if err != nil {
+		panic(err);
+	}
+	for _, file := range files {
+		// Omit the file extensions and print the file names
+		println(file.Name()[:len(file.Name())-3]);
+	}
 
 	printPages("pages");
 }
+**/
+

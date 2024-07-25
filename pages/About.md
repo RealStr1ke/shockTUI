@@ -1,2 +1,1 @@
-My name is Thandi lol
-My name is Thandi lol
+Hi! My name is Thandi Menelas.
