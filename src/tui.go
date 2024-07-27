@@ -10,9 +10,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
+	glamour "github.com/charmbracelet/glamour"
 	lipgloss "github.com/charmbracelet/lipgloss"
-	// glamour "github.com/charmbracelet/glamour"
 );
 
 
