@@ -12,19 +12,54 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	glamour "github.com/charmbracelet/glamour"
 	lipgloss "github.com/charmbracelet/lipgloss"
+	help "github.com/charmbracelet/bubbles/help"
+	key "github.com/charmbracelet/bubbles/key"
 );
 
+type guide struct {
+	keys		keyMap
+	help		help.Model
+	lastKey		string
+	quitting	bool
+};
 
 type model struct {
 	Pages		[]page
 	activePage	int
-}
+	guide		guide
+};
 
 type page struct {
 	Name	string
 	Content	string
 	Order	int
-}
+};
+
+type keyMap struct {
+	Left		key.Binding
+	Right		key.Binding
+	Help 		key.Binding
+	Quit 		key.Binding
+};
+
+var keys = keyMap{
+	Left: key.NewBinding(
+		key.WithKeys("left", "h"),
+		key.WithHelp("←/h", "Previous page"),
+	),
+	Right: key.NewBinding(
+		key.WithKeys("right", "l"),
+		key.WithHelp("→/l", "Next page"),
+	),
+	Help: key.NewBinding(
+		key.WithKeys("?"),
+		key.WithHelp("?", "Toggle help"),
+	),
+	Quit: key.NewBinding(
+		key.WithKeys("q", "esc", "ctrl+c"),
+		key.WithHelp("q", "Quit"),
+	),
+};
 
 // Box unicode chars: ┌ ┐ └ ┘ ─ │ ┬ ┴ ├ ┤ ┼
 var (
@@ -38,7 +73,21 @@ var (
 	pageRowStyle = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(0, 1).Align(lipgloss.Center).Width(74);
 	pageContentRenderer, _ = glamour.NewTermRenderer(glamour.WithAutoStyle(), glamour.WithWordWrap(74), glamour.WithPreservedNewLines());
 	pageWindowStyle = lipgloss.NewStyle().BorderForeground(highlightColor).Border(lipgloss.RoundedBorder()).UnsetBorderTop().Width(74).AlignVertical(lipgloss.Top);
-)
+	helpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"));
+	goodbyeStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Foreground(lipgloss.Color("#F38BA8"));
+	goodbyeMessage = "Thanks for checking out my portfolio TUI! :D";
+);
+
+func (k keyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Quit, k.Help};
+}
+
+func (k keyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Left, k.Right},
+		{k.Quit, k.Help},
+	};
+}
 
 func getPages(dir string) ([]page, error) {
 	files, err := os.ReadDir(dir);
@@ -82,8 +131,14 @@ func initialModel() model {
 	}
 
 	return model{
-		Pages:       pages,
-		activePage:  0,
+		Pages:      pages,
+		activePage: 0,
+		guide: 		guide{
+			keys: keys,
+			help: help.New(),
+			lastKey: "",
+			quitting: false,
+		},
 	};
 }
 
@@ -94,16 +149,22 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handles msg types
 	switch msg := msg.(type) {
+		// Handle window size msgs
+		case tea.WindowSizeMsg:
+			m.guide.help.Width = msg.Width;
+
 		// Handle key presses msgs
 		case tea.KeyMsg:
 			// Handles the actual key that was pressed
-			switch msg.String() {
+			switch {
 				// Quit the program
-				case "ctrl+c", "q":
+				case key.Matches(msg, m.guide.keys.Quit):
+					m.guide.quitting = true;
 					return m, tea.Quit;
 				
 				// Move to the next tab on the right
-				case "right", "l", "n", "tab":
+				case key.Matches(msg, m.guide.keys.Right):
+					m.guide.lastKey = "→";
 					if (m.activePage + 1 >= len(m.Pages)) {
 						m.activePage = 0;
 					} else {
@@ -111,12 +172,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 
 				// Move to the next tab on the left
-				case "left", "h", "p":
+				case key.Matches(msg, m.guide.keys.Left):
+					m.guide.lastKey = "←";
 					if (m.activePage == 0) {
 						m.activePage = len(m.Pages) - 1;
 					} else {
 						m.activePage--;
 					}
+				
+				// Toggle short/full help
+				case key.Matches(msg, m.guide.keys.Help):
+					m.guide.help.ShowAll = !m.guide.help.ShowAll;
 			}
 	}
 
@@ -125,6 +191,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	// If the user is quitting, return the goodbye message
+	if (m.guide.quitting) {
+		return goodbyeStyle.Render(goodbyeMessage);
+	}
+
 	// Initialize the main view string builder
 	doc := strings.Builder{};
 
@@ -159,11 +230,17 @@ func (m model) View() string {
 	// Render current page content
 	pageContent, _ := pageContentRenderer.Render(m.Pages[m.activePage].Content);
 	pageContent = pageWindowStyle.Render(pageContent);
-	
+
+	// Render help
+	helpContent := m.guide.help.View(m.guide.keys);
+	helpContent = helpStyle.Render(helpContent);
+
 	// Render the full view
 	doc.WriteString(pageTabs);
 	doc.WriteString("\n");
 	doc.WriteString(pageContent);
+	doc.WriteString("\n");
+	doc.WriteString(helpContent);
 	return docStyle.Render(doc.String());
 }
 
