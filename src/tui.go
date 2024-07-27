@@ -48,7 +48,7 @@ var keys = keyMap{
 		key.WithHelp("←/h", "Previous page"),
 	),
 	Right: key.NewBinding(
-		key.WithKeys("right", "l"),
+		key.WithKeys("right", "l", "tab"),
 		key.WithHelp("→/l", "Next page"),
 	),
 	Help: key.NewBinding(
@@ -74,7 +74,7 @@ var (
 	pageContentRenderer, _ = glamour.NewTermRenderer(glamour.WithAutoStyle(), glamour.WithWordWrap(74), glamour.WithPreservedNewLines());
 	pageWindowStyle = lipgloss.NewStyle().BorderForeground(highlightColor).Border(lipgloss.RoundedBorder()).UnsetBorderTop().Width(74).AlignVertical(lipgloss.Top);
 	helpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"));
-	goodbyeStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Foreground(lipgloss.Color("#F38BA8"));
+	goodbyeStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Foreground(lipgloss.Color("#F38BA8")).Padding(0, 1);
 	goodbyeMessage = "Thanks for checking out my portfolio TUI! :D";
 );
 
@@ -191,13 +191,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	// If the user is quitting, return the goodbye message
-	if (m.guide.quitting) {
-		return goodbyeStyle.Render(goodbyeMessage);
-	}
-
 	// Initialize the main view string builder
 	doc := strings.Builder{};
+
+	// If the user is quitting, return the goodbye message
+	if (m.guide.quitting) {
+		doc.WriteString(goodbyeStyle.Render(goodbyeMessage));
+		return docStyle.Render(doc.String());
+	}
 
 	// Render page tabs
 	var renderedPages []string;
