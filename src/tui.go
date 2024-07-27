@@ -1,178 +1,177 @@
-package src;
+package src
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/glamour"
+	lipgloss "github.com/charmbracelet/lipgloss"
+	// glamour "github.com/charmbracelet/glamour"
 );
 
+
 type model struct {
-	Tabs       []string
-	TabContent []string
-	activeTab  int
+	Pages		[]page
+	activePage	int
 }
 
-func getPages(dir string) (map[string]string, error) {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err;
+type page struct {
+	Name	string
+	Content	string
+	Order	int
+}
+
+// Box unicode chars: ┌ ┐ └ ┘ ─ │ ┬ ┴ ├ ┤ ┼
+var (
+	docStyle = lipgloss.NewStyle().Padding(1, 2, 1, 2).Width(80);
+	highlightColor = lipgloss.AdaptiveColor{Light: "#8839EF", Dark: "#CBA6F7"};
+	inactiveColor = lipgloss.AdaptiveColor{Light: "#313244", Dark: "#6C7086"};
+	activePageStyle = lipgloss.NewStyle().Bold(true).Foreground(highlightColor);
+	inactivePage = lipgloss.NewStyle().Foreground(inactiveColor);
+	separatorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFF"));
+	pageRowBorder = lipgloss.RoundedBorder();
+	pageRowStyle = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(0, 1).Align(lipgloss.Center).Width(74);
+	pageContentRenderer, _ = glamour.NewTermRenderer(glamour.WithAutoStyle(), glamour.WithWordWrap(74), glamour.WithPreservedNewLines());
+	pageWindowStyle = lipgloss.NewStyle().BorderForeground(highlightColor).Border(lipgloss.RoundedBorder()).UnsetBorderTop().Width(74).AlignVertical(lipgloss.Top);
+)
+
+func getPages(dir string) ([]page, error) {
+	files, err := os.ReadDir(dir);
+	if (err != nil) {
+		log.Fatal(err);
 	}
 	
-	pages := make(map[string]string)
+	pages := make(map[int]page);
 	for _, file := range files {
-		// pages = append(pages, file.Name()[:len(file.Name())-3]);
 		content, err := os.ReadFile(filepath.Join(dir, file.Name()));
-		if err != nil {
-			return nil, err;
+		if (err != nil) {
+			log.Fatal(err);
 		}
-		pages[file.Name()[:len(file.Name())-3]] = string(content);
+		order, err := strconv.Atoi(file.Name()[:1])
+		if err != nil {
+			log.Fatal(err)
+		}
+		pages[order] = page{
+			Name: file.Name()[4:len(file.Name()) - 3],
+			Content: string(content),
+			Order: order,
+		};
 	}
 
-	return pages, nil;
+	// Sort the pages by order
+	var orderedPages []page;
+	for _, p := range pages {
+		orderedPages = append(orderedPages, p);
+	}
+	sort.Slice(orderedPages, func(i, j int) bool {
+		return orderedPages[i].Order < orderedPages[j].Order;
+	});
+
+	return orderedPages, nil;
+}
+
+func initialModel() model {
+	pages, err := getPages("pages");
+	if (err != nil) {
+		log.Fatal(err);
+	}
+
+	return model{
+		Pages:       pages,
+		activePage:  0,
+	};
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return nil;
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handles msg types
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch keypress := msg.String(); keypress {
-		case "ctrl+c", "q":
-			return m, tea.Quit
-		case "right", "l", "n", "tab":
-			m.activeTab = min(m.activeTab+1, len(m.Tabs)-1)
-			return m, nil
-		case "left", "h", "p", "shift+tab":
-			m.activeTab = max(m.activeTab-1, 0)
-			return m, nil
-		}
+		// Handle key presses msgs
+		case tea.KeyMsg:
+			// Handles the actual key that was pressed
+			switch msg.String() {
+				// Quit the program
+				case "ctrl+c", "q":
+					return m, tea.Quit;
+				
+				// Move to the next tab on the right
+				case "right", "l", "n", "tab":
+					if (m.activePage + 1 >= len(m.Pages)) {
+						m.activePage = 0;
+					} else {
+						m.activePage++;
+					}
+
+				// Move to the next tab on the left
+				case "left", "h", "p":
+					if (m.activePage == 0) {
+						m.activePage = len(m.Pages) - 1;
+					} else {
+						m.activePage--;
+					}
+			}
 	}
 
+	// Return the updated model
 	return m, nil
 }
 
-func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
-	border := lipgloss.RoundedBorder()
-	border.BottomLeft = left
-	border.Bottom = middle
-	border.BottomRight = right
-	return border
-}
-
-var (
-	inactiveTabBorder = tabBorderWithBottom("┴", "─", "┴")
-	activeTabBorder   = tabBorderWithBottom("┘", " ", "└")
-	docStyle          = lipgloss.NewStyle().Padding(1, 2, 1, 2)
-	highlightColor    = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
-	inactiveTabStyle  = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(highlightColor).Padding(0, 1)
-	activeTabStyle    = inactiveTabStyle.Border(activeTabBorder, true)
-	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 0).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
-)
-
-// View returns the rendered view of the model.
-// It generates a string representation of the tabs and the active tab's content.
-// The rendered view includes the tabs and the content of the active tab.
-// The tabs are styled based on their active/inactive state.
-// The active tab is highlighted with the activeTabStyle, while the inactive tabs are styled with the inactiveTabStyle.
-// The rendered view is constructed by joining the rendered tabs horizontally using lipgloss.JoinHorizontal.
-// The active tab's content is retrieved from the TabContent map using the activeTab index.
-// The width of the active tab's content is adjusted to fit the window by subtracting the horizontal frame size of the windowStyle.
-// The final rendered view is returned as a string.
 func (m model) View() string {
-	// Create a strings.Builder to store the rendered view
-	doc := strings.Builder{}
+	// Initialize the main view string builder
+	doc := strings.Builder{};
 
-	// Create an empty slice to store the rendered tabs
-	var renderedTabs []string
+	// Render page tabs
+	var renderedPages []string;
+	for i, t := range m.Pages {
+		page := t.Name;
+		var style lipgloss.Style;
 
-	// Iterate over the tabs in the model
-	for i, t := range m.Tabs {
-		var style lipgloss.Style
-		isFirst, isLast, isActive := i == 0, i == len(m.Tabs)-1, i == m.activeTab
-
-		// Determine the style based on the tab's active/inactive state
-		if isActive {
-			style = activeTabStyle
+		if (i == m.activePage) {
+			style = activePageStyle;
 		} else {
-			style = inactiveTabStyle
+			style = inactivePage;
 		}
 
-		// Get the border of the style
-		border, _, _, _, _ := style.GetBorder()
+		// Render the active page
+		page = style.Render(page);
 
-		// Adjust the border based on the tab's position and active/inactive state
-		if isFirst && isActive {
-			border.BottomLeft = "│"
-		} else if isFirst && !isActive {
-			border.BottomLeft = "├"
-		} else if isLast && isActive {
-			border.BottomRight = "│"
-		} else if isLast && !isActive {
-			border.BottomRight = "┤"
+		// Add a • to the end of the page if it's not the last page
+		if (i != len(m.Pages) - 1) {
+			page += separatorStyle.Render(" • ");
 		}
 
-		// Apply the adjusted border to the style
-		style = style.Border(border)
-
-		// Render the tab using the style and append it to the renderedTabs slice
-		renderedTabs = append(renderedTabs, style.Render(t))
+		renderedPages = append(renderedPages, page);
 	}
-
-	// Join the rendered tabs horizontally using lipgloss.JoinHorizontal
-	row := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
-
-	// Write the row to the strings.Builder
-	doc.WriteString(row)
-	doc.WriteString("\n")
-
-	// Retrieve the content of the active tab from the TabContent map
-	activeTabContent := m.TabContent[m.activeTab]
-
-	// Adjust the width of the active tab's content to fit the window
-	adjustedContent := windowStyle.Width((lipgloss.Width(row) - windowStyle.GetHorizontalFrameSize())).Render(activeTabContent)
-
-	// Write the adjusted content to the strings.Builder using the docStyle
-	doc.WriteString(docStyle.Render(adjustedContent))
-
-	// Return the final rendered view as a string
-	return doc.String()
+	pageRowBorder.BottomLeft = "├";
+	pageRowBorder.BottomRight = "┤";
+	pageRowStyle = pageRowStyle.Border(pageRowBorder, true);
+	pageTabs := pageRowStyle.Render(strings.Join(renderedPages, ""));
+	
+	
+	// Render current page content
+	pageContent, _ := pageContentRenderer.Render(m.Pages[m.activePage].Content);
+	pageContent = pageWindowStyle.Render(pageContent);
+	
+	// Render the full view
+	doc.WriteString(pageTabs);
+	doc.WriteString("\n");
+	doc.WriteString(pageContent);
+	return docStyle.Render(doc.String());
 }
 
 func StartTUI() {
-	pages, err := getPages("pages");
-	if err != nil {
-		panic(err);
-	}
-	tabs := make([]string, 0, len(pages));
-	tabContent := make([]string, 0, len(pages));
-	for page, content := range pages {
-		tabs = append(tabs, page);
-		tabContent = append(tabContent, content);
-	}
-	
-	m := model{Tabs: tabs, TabContent: tabContent}
-	if _, err := tea.NewProgram(m).Run(); err != nil {
-		fmt.Println("Error running program:", err)
-		os.Exit(1)
-	}
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	p := tea.NewProgram(initialModel());
+	if _, err := p.Run(); err != nil {
+        fmt.Printf("Alas, there's been an error: %v", err)
+        os.Exit(1)
+    }
 }
