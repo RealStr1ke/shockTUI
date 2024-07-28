@@ -58,26 +58,14 @@ var (
 	inactiveColor = lipgloss.AdaptiveColor{Light: "#313244", Dark: "#6C7086"};
 
 	docStyle = lipgloss.NewStyle();
-	pageRowTitleStyle = lipgloss.NewStyle().Align(lipgloss.Left).Foreground(lipgloss.Color("#F38BA8")).PaddingLeft(2);
+	pageRowTitleStyle = lipgloss.NewStyle().Align(lipgloss.Left).Foreground(lipgloss.Color("#F38BA8")).Bold(true).PaddingLeft(2);
 	pageRowStyle = lipgloss.NewStyle().Align(lipgloss.Left);
 	activePageStyle = lipgloss.NewStyle().Bold(true).Foreground(highlightColor)
 	inactivePageStyle = lipgloss.NewStyle().Foreground(inactiveColor)
 	separatorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFF"));
-	pageViewTitleStyle = func() lipgloss.Style {
-		b := lipgloss.RoundedBorder()
-		b.Right = "├"
-		// return lipgloss.NewStyle().BorderStyle(b).Padding(0, 1)
-		return lipgloss.NewStyle()
-	}();
-	pageViewInfoStyle = func() lipgloss.Style {
-		b := lipgloss.RoundedBorder()
-		b.Left = "┤"
-		// return pageViewTitleStyle.BorderStyle(b)
-		return lipgloss.NewStyle()
-	}();
 	helpStyle = lipgloss.NewStyle();
 
-	pageRowTitle = "str1ke ";
+	pageRowTitle = "str1ke  ";
 );
 
 var keys = keyMap{
@@ -109,13 +97,14 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	};
 }
 
-func (p pageview) headerView() string {
-	line := strings.Repeat("─", max(0, p.viewport.Width))
-	return lipgloss.JoinHorizontal(lipgloss.Center, line)
+func (p pageview) headerView(title string) string {
+	title = fmt.Sprintf("──[ %s ]──", lipgloss.NewStyle().Foreground(lipgloss.Color("#FAB387")).Bold(true).Render(title));
+	line := strings.Repeat("─", max(0, p.viewport.Width-lipgloss.Width(title)))
+	return lipgloss.JoinHorizontal(lipgloss.Center, title, line)
 }
 
 func (p pageview) footerView() string {
-	info := fmt.Sprintf("%3.f%%", p.viewport.ScrollPercent()*100)
+	info := fmt.Sprintf("─[ %3.f%% ]──", p.viewport.ScrollPercent()*100)
 	line := strings.Repeat("─", max(0, p.viewport.Width-lipgloss.Width(info)))
 	return lipgloss.JoinHorizontal(lipgloss.Center, line, info)
 }
@@ -225,7 +214,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.width = msg.Width;
 			m.height = msg.Height;
 			m.updateStyleSizes();
-			headerHeight := lipgloss.Height(m.pageview.headerView());
+			headerHeight := lipgloss.Height(m.pageview.headerView(m.Pages[m.activePage].Name));
 			footerHeight := lipgloss.Height(m.pageview.footerView());
 			verticalMarginHeight := headerHeight + footerHeight + 3;
 			if (!m.pageview.ready) {
@@ -320,7 +309,7 @@ func (m model) View() string {
 	
 	// Render current page content
 	// viewport.Sync(m.pageview.viewport);
-	pageContent := m.pageview.headerView() + "\n" + m.pageview.viewport.View() + "\n" + m.pageview.footerView();
+	pageContent := m.pageview.headerView(m.Pages[m.activePage].Name) + "\n" + m.pageview.viewport.View() + "\n" + m.pageview.footerView();
 
 	// Render help
 	helpContent := m.guide.help.View(m.guide.keys);
