@@ -1,9 +1,9 @@
 package main
 
 import (
-	"shocktty/src"
+	"shocktty/src/tui"
 )
 
 func main() {
-	src.StartTUI();
+	tui.StartTUI();
 }

@@ -1,4 +1,4 @@
-package src
+package tui
 
 import (
 	"fmt"
@@ -125,7 +125,7 @@ func getPages(dir string) ([]page, error) {
 }
 
 func initialModel() model {
-	pages, err := getPages("pages");
+	pages, err := getPages("public/pages");
 	if (err != nil) {
 		log.Fatal(err);
 	}
