@@ -16,13 +16,6 @@ import (
 	key "github.com/charmbracelet/bubbles/key"
 );
 
-type state int
-
-const (
-	initializing state = iota
-	ready
-)
-
 type model struct {
 	Pages			[]page
 	activePage		int
@@ -32,7 +25,6 @@ type model struct {
 
 	guide			guide
 	width, height	int
-	state			state
 };
 
 type page struct {
@@ -170,7 +162,6 @@ func initialModel() model {
 
 		width:		 0,
 		height:		 0,
-		state:		 initializing,
 	}
 }
 
@@ -207,7 +198,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.width = msg.Width;
 			m.height = msg.Height;
 			m.updateStyleSizes();
-			m.state = ready;
 			return m, tea.ClearScreen;
 
 		// Handle key presses msgs
@@ -249,12 +239,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	// Initialize the main view string builder
 	doc := strings.Builder{};
-	
-	// If the model isn't ready, return an empty string
-	if (m.state == initializing) {
-		return doc.String();
-		
-	}
 
 	// Render page tabs
 	var renderedPages []string;
