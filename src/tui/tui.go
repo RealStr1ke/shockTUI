@@ -9,11 +9,12 @@ import (
 	"strconv"
 	"strings"
 
+	help "github.com/charmbracelet/bubbles/help"
+	key "github.com/charmbracelet/bubbles/key"
+	viewport "github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	glamour "github.com/charmbracelet/glamour"
 	lipgloss "github.com/charmbracelet/lipgloss"
-	help "github.com/charmbracelet/bubbles/help"
-	key "github.com/charmbracelet/bubbles/key"
 );
 
 type model struct {
@@ -25,12 +26,18 @@ type model struct {
 
 	guide			guide
 	width, height	int
+	pageview 		pageview
 };
 
 type page struct {
 	Name	string
 	Content	string
 	Order	int
+};
+
+type pageview struct {
+	viewport viewport.Model
+	ready	bool
 };
 
 type guide struct {
@@ -50,13 +57,24 @@ var (
 	highlightColor = lipgloss.AdaptiveColor{Light: "#8839EF", Dark: "#CBA6F7"};
 	inactiveColor = lipgloss.AdaptiveColor{Light: "#313244", Dark: "#6C7086"};
 
-	docStyle = lipgloss.NewStyle().Width(100).Height(50);
+	docStyle = lipgloss.NewStyle();
+	pageRowTitleStyle = lipgloss.NewStyle().Align(lipgloss.Left).Foreground(lipgloss.Color("#F38BA8")).PaddingLeft(2);
+	pageRowStyle = lipgloss.NewStyle().Align(lipgloss.Left);
 	activePageStyle = lipgloss.NewStyle().Bold(true).Foreground(highlightColor)
 	inactivePageStyle = lipgloss.NewStyle().Foreground(inactiveColor)
 	separatorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFF"));
-	pageRowTitleStyle = lipgloss.NewStyle().Align(lipgloss.Left).Foreground(lipgloss.Color("#F38BA8")).PaddingLeft(2);
-	pageRowStyle = lipgloss.NewStyle().Align(lipgloss.Left);
-	pageWindowStyle = lipgloss.NewStyle().AlignVertical(lipgloss.Top).Border(lipgloss.NormalBorder()).UnsetBorderLeft().UnsetBorderRight();
+	pageViewTitleStyle = func() lipgloss.Style {
+		b := lipgloss.RoundedBorder()
+		b.Right = "├"
+		// return lipgloss.NewStyle().BorderStyle(b).Padding(0, 1)
+		return lipgloss.NewStyle()
+	}();
+	pageViewInfoStyle = func() lipgloss.Style {
+		b := lipgloss.RoundedBorder()
+		b.Left = "┤"
+		// return pageViewTitleStyle.BorderStyle(b)
+		return lipgloss.NewStyle()
+	}();
 	helpStyle = lipgloss.NewStyle();
 
 	pageRowTitle = "str1ke ";
@@ -89,6 +107,17 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		{k.Left, k.Right},
 		{k.Quit, k.Help},
 	};
+}
+
+func (p pageview) headerView() string {
+	line := strings.Repeat("─", max(0, p.viewport.Width))
+	return lipgloss.JoinHorizontal(lipgloss.Center, line)
+}
+
+func (p pageview) footerView() string {
+	info := fmt.Sprintf("%3.f%%", p.viewport.ScrollPercent()*100)
+	line := strings.Repeat("─", max(0, p.viewport.Width-lipgloss.Width(info)))
+	return lipgloss.JoinHorizontal(lipgloss.Center, line, info)
 }
 
 func check(err error, msg string) {
@@ -170,19 +199,12 @@ func (m model) updateStyleSizes() {
 	docStyle = docStyle.Width(m.width);
 	docStyle = docStyle.Height(m.height);
 	pageRowStyle = pageRowStyle.Width(m.width);
-	pageWindowStyle = pageWindowStyle.Width(m.width);
-	if (m.guide.help.ShowAll) {
-		pageWindowStyle = pageWindowStyle.Height(m.height - 5);
-	} else {
-		pageWindowStyle = pageWindowStyle.Height(m.height - 4);
-	}
 }
 
 func renderMarkdown(m model, content string) string {
 	themePath := filepath.Join("assets", "themes", m.Themes[m.activeTheme], "glamour.json");
 	pageContentRenderer, _ := glamour.NewTermRenderer(glamour.WithPreservedNewLines(), glamour.WithWordWrap(m.width - 4), glamour.WithStylePath(themePath));
 	pageContent, _ := pageContentRenderer.Render(content);
-	pageContent = pageWindowStyle.Render(pageContent);
 	return pageContent;
 }
 
@@ -191,6 +213,11 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var (
+		cmd  tea.Cmd
+		cmds []tea.Cmd
+	)
+
 	// Handles msg types
 	switch msg := msg.(type) {
 		// Handle window size msgs
@@ -198,7 +225,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.width = msg.Width;
 			m.height = msg.Height;
 			m.updateStyleSizes();
-			return m, tea.ClearScreen;
+			headerHeight := lipgloss.Height(m.pageview.headerView());
+			footerHeight := lipgloss.Height(m.pageview.footerView());
+			verticalMarginHeight := headerHeight + footerHeight + 3;
+			if (!m.pageview.ready) {
+				m.pageview.viewport = viewport.New(msg.Width, msg.Height - verticalMarginHeight);
+				m.pageview.viewport.YPosition = headerHeight;
+				m.pageview.viewport.HighPerformanceRendering = false;
+				m.pageview.ready = true;
+				m.pageview.viewport.YPosition = headerHeight + 1;
+			} else {
+				m.pageview.viewport.Width = msg.Width;
+				m.pageview.viewport.Height = msg.Height - verticalMarginHeight;
+			}
+
+			m.pageview.viewport.SetContent(renderMarkdown(m, m.Pages[m.activePage].Content));
+			// cmds = append(cmds, viewport.Sync(m.pageview.viewport));
+			m.pageview.viewport, cmd = m.pageview.viewport.Update(msg);
+			cmds = append(cmds, cmd);
+			cmds = append(cmds, tea.ClearScreen)
+			return m, tea.Batch(cmds...);
 
 		// Handle key presses msgs
 		case tea.KeyMsg:
@@ -230,6 +276,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case key.Matches(msg, m.guide.keys.Help):
 					m.guide.help.ShowAll = !m.guide.help.ShowAll;
 			}
+
+			m.pageview.viewport.SetContent(renderMarkdown(m, m.Pages[m.activePage].Content));
+			// cmds = append(cmds, viewport.Sync(m.pageview.viewport));
+			m.pageview.viewport, cmd = m.pageview.viewport.Update(msg);
+			cmds = append(cmds, cmd);
+			return m, tea.Batch(cmds...);
 	}
 
 	// Return the updated model
@@ -267,7 +319,8 @@ func (m model) View() string {
 	
 	
 	// Render current page content
-	pageContent := renderMarkdown(m, m.Pages[m.activePage].Content);
+	// viewport.Sync(m.pageview.viewport);
+	pageContent := m.pageview.headerView() + "\n" + m.pageview.viewport.View() + "\n" + m.pageview.footerView();
 
 	// Render help
 	helpContent := m.guide.help.View(m.guide.keys);
@@ -284,7 +337,11 @@ func (m model) View() string {
 }
 
 func StartTUI() {
-	p := tea.NewProgram(initialModel(), tea.WithAltScreen());
+	p := tea.NewProgram(
+		initialModel(), 
+		tea.WithAltScreen(), 
+		tea.WithMouseCellMotion(),
+	);
 	if _, err := p.Run(); (err != nil) {
         fmt.Printf("Alas, there's been an error: %v", err)
         os.Exit(1)
