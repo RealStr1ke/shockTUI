@@ -1,7 +1,7 @@
 package main
 
 import (
-	"shockTUI/src"
+	"shocktty/src"
 )
 
 func main() {
