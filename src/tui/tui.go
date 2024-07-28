@@ -21,6 +21,8 @@ type model struct {
 	activePage	int
 	guide		guide
 	window 		window
+	Themes		[]string
+	activeTheme	int
 };
 
 type page struct {
@@ -90,60 +92,78 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	};
 }
 
-func getPages(dir string) ([]page, error) {
-	files, err := os.ReadDir(dir);
-	if (err != nil) {
-		log.Fatal(err);
+func check(err error, msg string) {
+	if err != nil {
+		log.Fatalf("%s: %v", msg, err)
 	}
-	
-	pages := make(map[int]page);
+}
+
+func getPages(dir string) ([]page, error) {
+	files, err := os.ReadDir(dir)
+	check(err, "Failed to read directory")
+
+	pages := make(map[int]page)
 	for _, file := range files {
-		content, err := os.ReadFile(filepath.Join(dir, file.Name()));
-		if (err != nil) {
-			log.Fatal(err);
-		}
+		content, err := os.ReadFile(filepath.Join(dir, file.Name()))
+		check(err, "Failed to read file")
+
 		order, err := strconv.Atoi(file.Name()[:1])
-		if err != nil {
-			log.Fatal(err)
-		}
+		check(err, "Failed to convert order to integer")
+
 		pages[order] = page{
-			Name: file.Name()[4:len(file.Name()) - 3],
+			Name:    file.Name()[4 : len(file.Name())-3],
 			Content: string(content),
-			Order: order,
-		};
+			Order:   order,
+		}
 	}
 
 	// Sort the pages by order
-	var orderedPages []page;
+	var orderedPages []page
 	for _, p := range pages {
-		orderedPages = append(orderedPages, p);
+		orderedPages = append(orderedPages, p)
 	}
 	sort.Slice(orderedPages, func(i, j int) bool {
-		return orderedPages[i].Order < orderedPages[j].Order;
-	});
+		return orderedPages[i].Order < orderedPages[j].Order
+	})
 
-	return orderedPages, nil;
+	return orderedPages, nil
+}
+
+func getThemes(dir string) ([]string, error) {
+	files, err := os.ReadDir(dir);
+	check(err, "Theme retrieval failed");
+
+	var themes []string;
+	for _, file := range files {
+		themes = append(themes, file.Name());
+	}
+	sort.Strings(themes);
+
+	return themes, nil;
 }
 
 func initialModel() model {
-	pages, err := getPages("public/pages");
-	if (err != nil) {
-		log.Fatal(err);
-	}
+	pages, err := getPages("assets/pages");
+	check(err, "Page retrieval failed");
+
+	themes, err := getThemes("assets/themes");
+	check(err, "Theme retrieval failed");
 
 	return model{
-		Pages:      pages,
-		activePage: 0,
-		guide: 		guide{
-			keys: keys,
-			help: help.New(),
+		Pages:       pages,
+		activePage:  0,
+		guide: guide{
+			keys:    keys,
+			help:    help.New(),
 			lastKey: "",
 		},
 		window: window{
 			Width:  0,
 			Height: 0,
 		},
-	};
+		Themes:      themes,
+		activeTheme: 0,
+	}
 }
 
 func updateStyleSizes(m model) {
@@ -151,11 +171,11 @@ func updateStyleSizes(m model) {
 	docStyle = docStyle.Width(m.window.Width);
 	pageRowStyle = pageRowStyle.Width(m.window.Width);
 	pageWindowStyle = pageWindowStyle.Width(m.window.Width);
-
 }
 
 func renderMarkdown(m model, content string) string {
-	pageContentRenderer, _ := glamour.NewTermRenderer(glamour.WithPreservedNewLines(), glamour.WithWordWrap(m.window.Width - 2));
+	themePath := filepath.Join("assets", "themes", m.Themes[m.activeTheme], "glamour.json");
+	pageContentRenderer, _ := glamour.NewTermRenderer(glamour.WithPreservedNewLines(), glamour.WithWordWrap(m.window.Width - 4), glamour.WithStylePath(themePath));
 	pageContent, _ := pageContentRenderer.Render(content);
 	pageContent = pageWindowStyle.Render(pageContent);
 	return pageContent;
