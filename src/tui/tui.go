@@ -16,24 +16,29 @@ import (
 	key "github.com/charmbracelet/bubbles/key"
 );
 
+type state int
+
+const (
+	initializing state = iota
+	ready
+)
+
 type model struct {
-	Pages		[]page
-	activePage	int
-	guide		guide
-	window 		window
-	Themes		[]string
-	activeTheme	int
+	Pages			[]page
+	activePage		int
+
+	Themes			[]string
+	activeTheme		int
+
+	guide			guide
+	width, height	int
+	state			state
 };
 
 type page struct {
 	Name	string
 	Content	string
 	Order	int
-};
-
-type window struct {
-	Width	int
-	Height	int
 };
 
 type guide struct {
@@ -48,6 +53,22 @@ type keyMap struct {
 	Help 		key.Binding
 	Quit 		key.Binding
 };
+
+var (
+	highlightColor = lipgloss.AdaptiveColor{Light: "#8839EF", Dark: "#CBA6F7"};
+	inactiveColor = lipgloss.AdaptiveColor{Light: "#313244", Dark: "#6C7086"};
+
+	docStyle = lipgloss.NewStyle().Width(100).Height(50);
+	activePageStyle = lipgloss.NewStyle().Bold(true).Foreground(highlightColor)
+	inactivePageStyle = lipgloss.NewStyle().Foreground(inactiveColor)
+	separatorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFF"));
+	pageRowTitleStyle = lipgloss.NewStyle().Align(lipgloss.Left).Foreground(lipgloss.Color("#F38BA8")).PaddingLeft(2);
+	pageRowStyle = lipgloss.NewStyle().Align(lipgloss.Left);
+	pageWindowStyle = lipgloss.NewStyle().AlignVertical(lipgloss.Top).Border(lipgloss.NormalBorder()).UnsetBorderLeft().UnsetBorderRight();
+	helpStyle = lipgloss.NewStyle();
+
+	pageRowTitle = "str1ke ";
+);
 
 var keys = keyMap{
 	Left: key.NewBinding(
@@ -68,26 +89,9 @@ var keys = keyMap{
 	),
 };
 
-var (
-	highlightColor = lipgloss.AdaptiveColor{Light: "#8839EF", Dark: "#CBA6F7"};
-	inactiveColor = lipgloss.AdaptiveColor{Light: "#313244", Dark: "#6C7086"};
-
-	docStyle = lipgloss.NewStyle().Width(100).Height(50);
-	activePageStyle = lipgloss.NewStyle().Bold(true).Foreground(highlightColor)
-	inactivePageStyle = lipgloss.NewStyle().Foreground(inactiveColor)
-	separatorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFF"));
-	pageRowTitleStyle = lipgloss.NewStyle().Align(lipgloss.Left).Foreground(lipgloss.Color("#F38BA8")).PaddingLeft(2);
-	pageRowStyle = lipgloss.NewStyle().Align(lipgloss.Left);
-	pageWindowStyle = lipgloss.NewStyle().AlignVertical(lipgloss.Top).Border(lipgloss.NormalBorder()).UnsetBorderLeft().UnsetBorderRight();
-	helpStyle = lipgloss.NewStyle();
-
-	pageRowTitle = "str1ke  ";
-);
-
 func (k keyMap) ShortHelp() []key.Binding {
 	return []key.Binding{k.Quit, k.Help};
 }
-
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Left, k.Right},
@@ -155,37 +159,37 @@ func initialModel() model {
 	return model{
 		Pages:       pages,
 		activePage:  0,
-		guide: guide{
+		Themes:      themes,
+		activeTheme: 0,
+
+		guide: 		 guide{
 			keys:    keys,
 			help:    help.New(),
 			lastKey: "",
 		},
-		window: window{
-			Width:  0,
-			Height: 0,
-		},
-		Themes:      themes,
-		activeTheme: 0,
+
+		width:		 0,
+		height:		 0,
+		state:		 initializing,
 	}
 }
 
-func updateStyleSizes(m model) {
-	m.guide.help.Width = m.window.Width;
-	docStyle = docStyle.Width(m.window.Width);
-	docStyle = docStyle.Height(m.window.Height);
-	pageRowStyle = pageRowStyle.Width(m.window.Width);
-	pageWindowStyle = pageWindowStyle.Width(m.window.Width);
+func (m model) updateStyleSizes() {
+	m.guide.help.Width = m.width;
+	docStyle = docStyle.Width(m.width);
+	docStyle = docStyle.Height(m.height);
+	pageRowStyle = pageRowStyle.Width(m.width);
+	pageWindowStyle = pageWindowStyle.Width(m.width);
 	if (m.guide.help.ShowAll) {
-		pageWindowStyle = pageWindowStyle.Height(m.window.Height - 5);
+		pageWindowStyle = pageWindowStyle.Height(m.height - 5);
 	} else {
-		pageWindowStyle = pageWindowStyle.Height(m.window.Height - 4);
+		pageWindowStyle = pageWindowStyle.Height(m.height - 4);
 	}
-
 }
 
 func renderMarkdown(m model, content string) string {
 	themePath := filepath.Join("assets", "themes", m.Themes[m.activeTheme], "glamour.json");
-	pageContentRenderer, _ := glamour.NewTermRenderer(glamour.WithPreservedNewLines(), glamour.WithWordWrap(m.window.Width - 4), glamour.WithStylePath(themePath));
+	pageContentRenderer, _ := glamour.NewTermRenderer(glamour.WithPreservedNewLines(), glamour.WithWordWrap(m.width - 4), glamour.WithStylePath(themePath));
 	pageContent, _ := pageContentRenderer.Render(content);
 	pageContent = pageWindowStyle.Render(pageContent);
 	return pageContent;
@@ -200,9 +204,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 		// Handle window size msgs
 		case tea.WindowSizeMsg:
-			m.window.Width = msg.Width;
-			m.window.Height = msg.Height;
-			updateStyleSizes(m);
+			m.width = msg.Width;
+			m.height = msg.Height;
+			m.updateStyleSizes();
+			m.state = ready;
 			return m, tea.ClearScreen;
 
 		// Handle key presses msgs
@@ -244,9 +249,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	// Initialize the main view string builder
 	doc := strings.Builder{};
-
-	// Update the style sizes
-	updateStyleSizes(m);
+	
+	// If the model isn't ready, return an empty string
+	if (m.state == initializing) {
+		return doc.String();
+		
+	}
 
 	// Render page tabs
 	var renderedPages []string;
