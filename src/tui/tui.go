@@ -72,13 +72,16 @@ var (
 	highlightColor = lipgloss.AdaptiveColor{Light: "#8839EF", Dark: "#CBA6F7"};
 	inactiveColor = lipgloss.AdaptiveColor{Light: "#313244", Dark: "#6C7086"};
 
-	docStyle = lipgloss.NewStyle();
-	activePageStyle = lipgloss.NewStyle().Bold(true).Foreground(highlightColor);
-	inactivePageStyle = lipgloss.NewStyle().Foreground(inactiveColor);
+	docStyle = lipgloss.NewStyle().Width(100).Height(50);
+	activePageStyle = lipgloss.NewStyle().Bold(true).Foreground(highlightColor)
+	inactivePageStyle = lipgloss.NewStyle().Foreground(inactiveColor)
 	separatorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFF"));
-	pageRowStyle = lipgloss.NewStyle().Padding(0, 1).Align(lipgloss.Center);
-	pageWindowStyle = lipgloss.NewStyle().AlignVertical(lipgloss.Top);
-	helpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"));
+	pageRowTitleStyle = lipgloss.NewStyle().Align(lipgloss.Left).Foreground(lipgloss.Color("#F38BA8")).PaddingLeft(2);
+	pageRowStyle = lipgloss.NewStyle().Align(lipgloss.Left);
+	pageWindowStyle = lipgloss.NewStyle().AlignVertical(lipgloss.Top).Border(lipgloss.NormalBorder()).UnsetBorderLeft().UnsetBorderRight();
+	helpStyle = lipgloss.NewStyle();
+
+	pageRowTitle = "str1ke  ";
 );
 
 func (k keyMap) ShortHelp() []key.Binding {
@@ -169,8 +172,15 @@ func initialModel() model {
 func updateStyleSizes(m model) {
 	m.guide.help.Width = m.window.Width;
 	docStyle = docStyle.Width(m.window.Width);
+	docStyle = docStyle.Height(m.window.Height);
 	pageRowStyle = pageRowStyle.Width(m.window.Width);
 	pageWindowStyle = pageWindowStyle.Width(m.window.Width);
+	if (m.guide.help.ShowAll) {
+		pageWindowStyle = pageWindowStyle.Height(m.window.Height - 5);
+	} else {
+		pageWindowStyle = pageWindowStyle.Height(m.window.Height - 4);
+	}
+
 }
 
 func renderMarkdown(m model, content string) string {
@@ -235,6 +245,9 @@ func (m model) View() string {
 	// Initialize the main view string builder
 	doc := strings.Builder{};
 
+	// Update the style sizes
+	updateStyleSizes(m);
+
 	// Render page tabs
 	var renderedPages []string;
 	for i, t := range m.Pages {
@@ -257,6 +270,7 @@ func (m model) View() string {
 
 		renderedPages = append(renderedPages, page);
 	}
+	pageTabsTitle := pageRowTitleStyle.Render(pageRowTitle);
 	pageTabs := pageRowStyle.Render(strings.Join(renderedPages, ""));
 	
 	
@@ -268,6 +282,7 @@ func (m model) View() string {
 	helpContent = helpStyle.Render(helpContent);
 
 	// Render the full view
+	doc.WriteString(pageTabsTitle);
 	doc.WriteString(pageTabs);
 	doc.WriteString("\n");
 	doc.WriteString(pageContent);
