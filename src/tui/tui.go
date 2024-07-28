@@ -20,7 +20,6 @@ type guide struct {
 	keys		keyMap
 	help		help.Model
 	lastKey		string
-	quitting	bool
 };
 
 type model struct {
@@ -63,19 +62,16 @@ var keys = keyMap{
 
 // Box unicode chars: ┌ ┐ └ ┘ ─ │ ┬ ┴ ├ ┤ ┼
 var (
-	docStyle = lipgloss.NewStyle().Padding(1, 2, 1, 2).Width(80);
+	docStyle = lipgloss.NewStyle().Width(80);
 	highlightColor = lipgloss.AdaptiveColor{Light: "#8839EF", Dark: "#CBA6F7"};
 	inactiveColor = lipgloss.AdaptiveColor{Light: "#313244", Dark: "#6C7086"};
 	activePageStyle = lipgloss.NewStyle().Bold(true).Foreground(highlightColor);
 	inactivePage = lipgloss.NewStyle().Foreground(inactiveColor);
 	separatorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFF"));
-	pageRowBorder = lipgloss.RoundedBorder();
-	pageRowStyle = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(0, 1).Align(lipgloss.Center).Width(74);
+	pageRowStyle = lipgloss.NewStyle().Padding(0, 1).Align(lipgloss.Center).Width(74);
 	pageContentRenderer, _ = glamour.NewTermRenderer(glamour.WithAutoStyle(), glamour.WithWordWrap(74), glamour.WithPreservedNewLines());
-	pageWindowStyle = lipgloss.NewStyle().BorderForeground(highlightColor).Border(lipgloss.RoundedBorder()).UnsetBorderTop().Width(74).AlignVertical(lipgloss.Top);
+	pageWindowStyle = lipgloss.NewStyle().Width(74).AlignVertical(lipgloss.Top);
 	helpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"));
-	goodbyeStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Foreground(lipgloss.Color("#F38BA8")).Padding(0, 1);
-	goodbyeMessage = "Thanks for checking out my portfolio TUI! :D";
 );
 
 func (k keyMap) ShortHelp() []key.Binding {
@@ -137,7 +133,6 @@ func initialModel() model {
 			keys: keys,
 			help: help.New(),
 			lastKey: "",
-			quitting: false,
 		},
 	};
 }
@@ -159,7 +154,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch {
 				// Quit the program
 				case key.Matches(msg, m.guide.keys.Quit):
-					m.guide.quitting = true;
 					return m, tea.Quit;
 				
 				// Move to the next tab on the right
@@ -194,12 +188,6 @@ func (m model) View() string {
 	// Initialize the main view string builder
 	doc := strings.Builder{};
 
-	// If the user is quitting, return the goodbye message
-	if (m.guide.quitting) {
-		doc.WriteString(goodbyeStyle.Render(goodbyeMessage));
-		return docStyle.Render(doc.String());
-	}
-
 	// Render page tabs
 	var renderedPages []string;
 	for i, t := range m.Pages {
@@ -222,9 +210,6 @@ func (m model) View() string {
 
 		renderedPages = append(renderedPages, page);
 	}
-	pageRowBorder.BottomLeft = "├";
-	pageRowBorder.BottomRight = "┤";
-	pageRowStyle = pageRowStyle.Border(pageRowBorder, true);
 	pageTabs := pageRowStyle.Render(strings.Join(renderedPages, ""));
 	
 	
@@ -246,7 +231,7 @@ func (m model) View() string {
 }
 
 func StartTUI() {
-	p := tea.NewProgram(initialModel());
+	p := tea.NewProgram(initialModel(), tea.WithAltScreen());
 	if _, err := p.Run(); (err != nil) {
         fmt.Printf("Alas, there's been an error: %v", err)
         os.Exit(1)
