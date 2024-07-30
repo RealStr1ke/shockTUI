@@ -50,6 +50,7 @@ type keyMap struct {
 	Left		key.Binding
 	Right		key.Binding
 	Help 		key.Binding
+	Theme 		key.Binding
 	Quit 		key.Binding
 };
 
@@ -59,6 +60,7 @@ var (
 
 	docStyle = lipgloss.NewStyle();
 	pageRowTitleStyle = lipgloss.NewStyle().Align(lipgloss.Left).Foreground(lipgloss.Color("#F38BA8")).Bold(true).PaddingLeft(2);
+	themeTitleStyle = lipgloss.NewStyle().Align(lipgloss.Right).Foreground(lipgloss.Color("#F38BA8")).Bold(true);
 	pageRowStyle = lipgloss.NewStyle().Align(lipgloss.Left);
 	activePageStyle = lipgloss.NewStyle().Bold(true).Foreground(highlightColor)
 	inactivePageStyle = lipgloss.NewStyle().Foreground(inactiveColor)
@@ -80,6 +82,10 @@ var keys = keyMap{
 	Help: key.NewBinding(
 		key.WithKeys("?"),
 		key.WithHelp("?", "Toggle help"),
+	),
+	Theme: key.NewBinding(
+		key.WithKeys("t", "ctrl+tab"),
+		key.WithHelp("t", "Change theme"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("q", "esc", "ctrl+c"),
@@ -103,10 +109,11 @@ func (p pageview) headerView(title string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Center, title, line)
 }
 
-func (p pageview) footerView() string {
-	info := fmt.Sprintf("─[ %3.f%% ]──", p.viewport.ScrollPercent()*100)
-	line := strings.Repeat("─", max(0, p.viewport.Width-lipgloss.Width(info)))
-	return lipgloss.JoinHorizontal(lipgloss.Center, line, info)
+func (p pageview) footerView(themeTitle string) string {
+	info := fmt.Sprintf("──[ %3.f%% ]──", p.viewport.ScrollPercent()*100)
+	theme := fmt.Sprintf("──[ %s ]──", themeTitleStyle.Render(themeTitle));
+	line := strings.Repeat("─", max(0, p.viewport.Width - lipgloss.Width(info) - lipgloss.Width(theme)))
+	return lipgloss.JoinHorizontal(lipgloss.Center, theme, line, info)
 }
 
 func check(err error, msg string) {
@@ -187,7 +194,7 @@ func (m model) updateStyleSizes() {
 	m.guide.help.Width = m.width;
 	docStyle = docStyle.Width(m.width);
 	docStyle = docStyle.Height(m.height);
-	pageRowStyle = pageRowStyle.Width(m.width);
+	pageRowStyle = pageRowStyle.Width(m.width - len(m.Themes[m.activeTheme]));
 }
 
 func renderMarkdown(m model, content string) string {
@@ -215,7 +222,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.height = msg.Height;
 			m.updateStyleSizes();
 			headerHeight := lipgloss.Height(m.pageview.headerView(m.Pages[m.activePage].Name));
-			footerHeight := lipgloss.Height(m.pageview.footerView());
+			footerHeight := lipgloss.Height(m.pageview.footerView(m.Themes[m.activeTheme]));
 			verticalMarginHeight := headerHeight + footerHeight + 3;
 			if (!m.pageview.ready) {
 				m.pageview.viewport = viewport.New(msg.Width, msg.Height - verticalMarginHeight);
@@ -264,6 +271,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Toggle short/full help
 				case key.Matches(msg, m.guide.keys.Help):
 					m.guide.help.ShowAll = !m.guide.help.ShowAll;
+				
+				// Change theme
+				case key.Matches(msg, m.guide.keys.Theme):
+					m.guide.lastKey = "t";
+					if (m.activeTheme + 1 >= len(m.Themes)) {
+						m.activeTheme = 0;
+					} else {
+						m.activeTheme++;
+					}
 			}
 
 			m.pageview.viewport.SetContent(renderMarkdown(m, m.Pages[m.activePage].Content));
@@ -303,21 +319,19 @@ func (m model) View() string {
 
 		renderedPages = append(renderedPages, page);
 	}
+	pageTabs := strings.Join(renderedPages, "");
 	pageTabsTitle := pageRowTitleStyle.Render(pageRowTitle);
-	pageTabs := pageRowStyle.Render(strings.Join(renderedPages, ""));
-	
 	
 	// Render current page content
 	// viewport.Sync(m.pageview.viewport);
-	pageContent := m.pageview.headerView(m.Pages[m.activePage].Name) + "\n" + m.pageview.viewport.View() + "\n" + m.pageview.footerView();
+	pageContent := m.pageview.headerView(m.Pages[m.activePage].Name) + "\n" + m.pageview.viewport.View() + "\n" + m.pageview.footerView(m.Themes[m.activeTheme]);
 
 	// Render help
 	helpContent := m.guide.help.View(m.guide.keys);
 	helpContent = helpStyle.Render(helpContent);
 
 	// Render the full view
-	doc.WriteString(pageTabsTitle);
-	doc.WriteString(pageTabs);
+	doc.WriteString(pageRowStyle.Render(lipgloss.JoinHorizontal(lipgloss.Top, pageTabsTitle, pageTabs)));
 	doc.WriteString("\n");
 	doc.WriteString(pageContent);
 	doc.WriteString("\n");
