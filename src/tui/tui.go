@@ -94,12 +94,13 @@ var keys = keyMap{
 };
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Quit, k.Help};
+	return []key.Binding{k.Quit, k.Help, k.Theme};
 }
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Left, k.Right},
 		{k.Quit, k.Help},
+		{k.Theme},
 	};
 }
 
