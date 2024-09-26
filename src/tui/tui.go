@@ -15,13 +15,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	glamour "github.com/charmbracelet/glamour"
 	lipgloss "github.com/charmbracelet/lipgloss"
+
+	toml "github.com/pelletier/go-toml/v2"
 );
 
 type model struct {
 	Pages			[]page
 	activePage		int
 
-	Themes			[]string
+	Themes			[]theme
 	activeTheme		int
 
 	guide			guide
@@ -36,8 +38,8 @@ type page struct {
 };
 
 type pageview struct {
-	viewport viewport.Model
-	ready	bool
+	viewport	viewport.Model
+	ready		bool
 };
 
 type guide struct {
@@ -53,6 +55,23 @@ type keyMap struct {
 	Theme 		key.Binding
 	Quit 		key.Binding
 };
+
+type theme struct {
+	Name		string
+	ColorsPath	string
+	GlamourPath	string
+};
+
+type themeColors struct {
+	TitleColor			string
+	InactiveTabColor	string
+	ActiveTabColor		string
+	TabTitleColor		string
+	TabBorderColor		string
+	ThemeTitleColor		string
+	PageProgressColor	string
+};
+
 
 var (
 	highlightColor = lipgloss.AdaptiveColor{Light: "#8839EF", Dark: "#CBA6F7"};
@@ -154,15 +173,19 @@ func getPages(dir string) ([]page, error) {
 	return orderedPages, nil
 }
 
-func getThemes(dir string) ([]string, error) {
+func getThemes(dir string) ([]theme, error) {
 	files, err := os.ReadDir(dir);
 	check(err, "Theme retrieval failed");
 
-	var themes []string;
+	var themes []theme;
 	for _, file := range files {
-		themes = append(themes, file.Name());
+		currentTheme := theme{
+			Name: file.Name(),
+			ColorsPath: filepath.Join(dir, file.Name(), "colors.toml"),
+			GlamourPath: filepath.Join(dir, file.Name(), "glamour.json"),
+		}
+		themes = append(themes, currentTheme);
 	}
-	sort.Strings(themes);
 
 	return themes, nil;
 }
@@ -195,12 +218,31 @@ func (m model) updateStyleSizes() {
 	m.guide.help.Width = m.width;
 	docStyle = docStyle.Width(m.width);
 	docStyle = docStyle.Height(m.height);
-	pageRowStyle = pageRowStyle.Width(m.width - len(m.Themes[m.activeTheme]));
+	pageRowStyle = pageRowStyle.Width(m.width - len(m.Themes[m.activeTheme].Name));
+}
+
+func (m model) updateStyleColors() {
+	// Get current theme and get the contents of the colors.toml file
+	currentTheme := m.Themes[m.activeTheme];
+	colorsPath := currentTheme.ColorsPath;
+	colorsFile, err := os.ReadFile(colorsPath);
+	check(err, "Failed to read colors file");
+
+	// Parse the colors.toml file
+	var colors themeColors;
+	err = toml.Unmarshal(colorsFile, &colors);
+	check(err, "Failed to unmarshal colors file");
+
+	// Update the styles with the new colors
+	pageRowTitleStyle = pageRowTitleStyle.Foreground(lipgloss.Color(colors.TitleColor));
+	themeTitleStyle = themeTitleStyle.Foreground(lipgloss.Color(colors.ThemeTitleColor));
+	
+	
 }
 
 func renderMarkdown(m model, content string) string {
-	themePath := filepath.Join("assets", "themes", m.Themes[m.activeTheme], "glamour.json");
-	pageContentRenderer, _ := glamour.NewTermRenderer(glamour.WithPreservedNewLines(), glamour.WithWordWrap(m.width - 4), glamour.WithStylePath(themePath));
+	glamourThemePath := m.Themes[m.activeTheme].GlamourPath;
+	pageContentRenderer, _ := glamour.NewTermRenderer(glamour.WithPreservedNewLines(), glamour.WithWordWrap(m.width - 4), glamour.WithStylePath(glamourThemePath));
 	pageContent, _ := pageContentRenderer.Render(content);
 	return pageContent;
 }
@@ -223,7 +265,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.height = msg.Height;
 			m.updateStyleSizes();
 			headerHeight := lipgloss.Height(m.pageview.headerView(m.Pages[m.activePage].Name));
-			footerHeight := lipgloss.Height(m.pageview.footerView(m.Themes[m.activeTheme]));
+			footerHeight := lipgloss.Height(m.pageview.footerView(m.Themes[m.activeTheme].Name));
 			verticalMarginHeight := headerHeight + footerHeight + 3;
 			if (!m.pageview.ready) {
 				m.pageview.viewport = viewport.New(msg.Width, msg.Height - verticalMarginHeight);
@@ -325,7 +367,7 @@ func (m model) View() string {
 	
 	// Render current page content
 	// viewport.Sync(m.pageview.viewport);
-	pageContent := m.pageview.headerView(m.Pages[m.activePage].Name) + "\n" + m.pageview.viewport.View() + "\n" + m.pageview.footerView(m.Themes[m.activeTheme]);
+	pageContent := m.pageview.headerView(m.Pages[m.activePage].Name) + "\n" + m.pageview.viewport.View() + "\n" + m.pageview.footerView(m.Themes[m.activeTheme].Name);
 
 	// Render help
 	helpContent := m.guide.help.View(m.guide.keys);
@@ -337,7 +379,7 @@ func (m model) View() string {
 	doc.WriteString(pageContent);
 	doc.WriteString("\n");
 	doc.WriteString(helpContent);
-	return docStyle.Render(doc.String());
+	return docStyle.Render(doc.String()) + "RAAAHHHHH";
 }
 
 func StartTUI() {
